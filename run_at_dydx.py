@@ -1,3 +1,5 @@
+# Copyright © 2024 Taoshi Inc
+
 import json
 
 from dydx_wrapper.dydx_wrapper import dYdXWrapper

@@ -1,6 +1,6 @@
-import requests
+# Copyright © 2024 Taoshi Inc
 
-from utils.logger_util import LoggerUtil
+import requests
 
 
 class TGBot:

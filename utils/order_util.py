@@ -1,6 +1,7 @@
+# Copyright © 2024 Taoshi Inc
+
 from typing import List, Dict
 
-from utils.logger_util import LoggerUtil
 import json
 import requests
 

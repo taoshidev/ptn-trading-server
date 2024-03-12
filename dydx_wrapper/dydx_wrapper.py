@@ -1,3 +1,5 @@
+# Copyright © 2024 Taoshi Inc
+
 import decimal
 import time
 

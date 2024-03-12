@@ -1,3 +1,5 @@
+# Copyright © 2024 Taoshi Inc
+
 from utils.logger_util import LoggerUtil
 from utils.order_util import OrderUtil
 from tgbot import TGBot
