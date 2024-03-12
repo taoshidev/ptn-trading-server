@@ -21,6 +21,7 @@ def get_new_miner_order(_flattened_order):
 	_m = _flattened_order["muid"]
 
 	payload = f"Miner ID: {_m} \n " \
+	          f"Position Type: {order_position_net_leverage} \n " \
 	          f"Position Net Leverage: {order_position_net_leverage} \n " \
 	          f"Rank: {_rank} \n " \
 	          f"Order Trade Pair: {order_trade_pair} \n " \

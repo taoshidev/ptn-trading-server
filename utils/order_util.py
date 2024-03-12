@@ -17,6 +17,15 @@ class OrderUtil:
 
 	FLAT = "FLAT"
 
+	@staticmethod
+	def get_current_miner_positions():
+		try:
+			miner_positions_data = StorageUtil.get_file(OrderUtil.MINER_POSITION_LOCATION)
+			miner_positions_data = json.loads(miner_positions_data)
+		except FileNotFoundError:
+			miner_positions_data = None
+		return miner_positions_data
+
 
 	@staticmethod
 	def get_new_miner_positions(api_key):
@@ -47,6 +56,7 @@ class OrderUtil:
 					"close_ms"] > TimeUtil.now_in_millis() - TimeUtil.minute_in_millis(30)):
 					for order in _p["orders"]:
 						order["position_uuid"] = _p["position_uuid"]
+						order["position_type"] = _p["position_type"]
 						order["net_leverage"] = _p["net_leverage"]
 						order["rank"] = _rank
 						order["muid"] = _muid
@@ -75,12 +85,7 @@ class OrderUtil:
 		# safely create the dir if it doesnt exist already
 		StorageUtil.make_dir(OrderUtil.MINER_POSITIONS_DIR)
 
-		try:
-			miner_positions_data = StorageUtil.get_file(OrderUtil.MINER_POSITION_LOCATION)
-			miner_positions_data = json.loads(miner_positions_data)
-		except FileNotFoundError:
-			logger.debug("miner positions data doesn't exist")
-			miner_positions_data = None
+		miner_positions_data = OrderUtil.get_current_miner_positions()
 
 		if miner_positions_data is None:
 			logger.info("no miner positions file exists, sending all existing orders.")
