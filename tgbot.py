@@ -1,6 +1,6 @@
 import requests
 
-from utils.output_util import OutputUtil
+from utils.logger_util import LoggerUtil
 
 
 class TGBot:
@@ -9,7 +9,7 @@ class TGBot:
 		self._chat_id = 'xxxx'
 		self._send_url = f'https://api.telegram.org/bot{self._api_token}/sendMessage'
 
-	def send_message(self, payload):
+	def send_message(self, payload, logger):
 		payload_json = {
 			'chat_id': self._chat_id,
 			'parse_mode': 'HTML',
@@ -17,5 +17,5 @@ class TGBot:
 		}
 
 		return_message = requests.post(self._send_url, json=payload_json)
-		OutputUtil.output(str(return_message))
+		logger.info(str(return_message))
 		return self

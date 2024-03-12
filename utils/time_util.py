@@ -1,6 +1,6 @@
 # developer: Taoshidev
 # Copyright © 2023 Taoshi Inc
-
+import time
 from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
 
@@ -39,3 +39,9 @@ class TimeUtil:
     def hours_in_millis(hours: int = 24) -> int:
         # standard is 1 day
         return 60000 * 60 * hours * 1 * 1
+
+    @staticmethod
+    def sleeper(sleeper_time, subject, logger):
+        logger.debug(f"sleeper called for [{subject}]...")
+        time.sleep(sleeper_time)
+        logger.debug(f"sleeper done for [{subject}].")
