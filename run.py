@@ -7,6 +7,20 @@ from utils.storage_util import StorageUtil
 from tgbot import TGBot
 from utils.time_util import TimeUtil
 
+import logging
+
+# Create a logger
+logger = logging.getLogger('example_logger')
+
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+# Add the handler to the logger
+logger.addHandler(handler)
+
 API_KEY = "xxxx"
 
 # TODO - update to prod when ready
@@ -58,10 +72,10 @@ def get_new_miner_order(_flattened_order):
 	return payload
 
 
-def sleeper(sleeper_time):
-	print("sleeper called...")
+def sleeper(sleeper_time, subject):
+	logger.debug(f"sleeper called for [{subject}]...")
 	time.sleep(sleeper_time)
-	print("sleeper done.")
+	logger.debug( f"sleeper done for [{subject}].")
 
 
 def send_new_miner_order(_new_order, add_sleep=True):
@@ -69,7 +83,7 @@ def send_new_miner_order(_new_order, add_sleep=True):
 	TGBot().send_message(nmo)
 	if add_sleep:
 		# standardized sleep time between messages
-		sleeper(5)
+		sleeper(5, "new_miner_order")
 
 
 def get_flattened_order_map(data):
@@ -95,18 +109,18 @@ def get_flattened_order_map(data):
 if __name__ == "__main__":
 
 	while True:
-		print("starting another check for new orders...")
+		logger.info("starting another check for new orders...")
 
 		response = get_new_miner_positions()
 
 		# Check if the request was successful (status code 200)
 		if response.status_code == 200:
-			print("GET request was successful.")
+			logger.debug( "GET request was successful.")
 			new_miner_positions_data = json.loads(response.json())
 		else:
-			print(response.__dict__)
-			print("GET request failed with status code:", response.status_code)
-			sleeper(RUN_SLEEP_TIME)
+			logger.debug( response.__dict__)
+			logger.debug( "GET request failed with status code: " + response.status_code)
+			sleeper(RUN_SLEEP_TIME, "failed request")
 			continue
 
 		# get the response data, if it doesnt exist store it.
@@ -120,7 +134,7 @@ if __name__ == "__main__":
 			miner_positions_data = StorageUtil.get_file(MINER_POSITION_LOCATION)
 			miner_positions_data = json.loads(miner_positions_data)
 		except FileNotFoundError:
-			print("miner positions data doesn't exist")
+			logger.debug( "miner positions data doesn't exist")
 			miner_positions_data = None
 
 		if miner_positions_data is None:
@@ -133,13 +147,15 @@ if __name__ == "__main__":
 			new_orders, new_order_uuids = get_flattened_order_map(new_miner_positions_data)
 			orders, order_uuids = get_flattened_order_map(miner_positions_data)
 
-			print(f"new order uuids : [{new_order_uuids}]")
-			print(f"existing order uuids : [{order_uuids}]")
+			logging.debug(f"new order uuids : [{new_order_uuids}]")
+			logging.debug(f"existing order uuids : [{order_uuids}]")
 
 			new_order_uuids_to_send = [value for value in new_order_uuids if value not in order_uuids]
+
+			logging.info(f"new order uuids to send : [{new_order_uuids_to_send}]")
 
 			for order_uuid in new_order_uuids_to_send:
 				send_new_miner_order(new_orders[order_uuid])
 		StorageUtil.write_file(MINER_POSITION_LOCATION, new_miner_positions_data)
 
-		sleeper(RUN_SLEEP_TIME)
+		sleeper(RUN_SLEEP_TIME, "completed request")
