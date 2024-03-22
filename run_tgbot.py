@@ -11,8 +11,9 @@ RUN_SLEEP_TIME = 60
 
 
 def get_new_miner_order(_flattened_order):
+	order_position_type = _flattened_order["position_type"]
 	order_position_net_leverage = _flattened_order["net_leverage"]
-	order_trade_pair = _flattened_order["trade_pair"]["trade_pair_id"]
+	order_trade_pair = _flattened_order["trade_pair"]
 	order_type = _flattened_order["order_type"]
 	if order_type == OrderUtil.FLAT:
 		order_leverage = "N/A"
@@ -23,7 +24,7 @@ def get_new_miner_order(_flattened_order):
 	_m = _flattened_order["muid"]
 
 	payload = f"Miner ID: {_m} \n " \
-	          f"Position Type: {order_position_net_leverage} \n " \
+	          f"Position Type: {order_position_type} \n " \
 	          f"Position Net Leverage: {order_position_net_leverage} \n " \
 	          f"Rank: {_rank} \n " \
 	          f"Order Trade Pair: {order_trade_pair} \n " \

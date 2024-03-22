@@ -61,6 +61,7 @@ class OrderUtil:
 						order["net_leverage"] = _p["net_leverage"]
 						order["rank"] = _rank
 						order["muid"] = _muid
+						order["trade_pair"] = _p["trade_pair"]
 						flattened_order_map[order["order_uuid"]] = order
 						unique_order_uuids.add(order["order_uuid"])
 		return flattened_order_map, unique_order_uuids
@@ -73,7 +74,7 @@ class OrderUtil:
 		# Check if the request was successful (status code 200)
 		if response.status_code == 200:
 			logger.debug("GET request was successful.")
-			new_miner_positions_data = json.loads(response.json())
+			new_miner_positions_data = response.json()
 		else:
 			logger.debug(response.__dict__)
 			logger.debug("GET request failed with status code: " + response.status_code)
