@@ -1,9 +1,10 @@
-# Copyright © 2024 Taoshi Inc
+# Copyright © 2024 Taoshi Inc (edits by sirouk)
 
 import json
 import os
 import pickle
 from typing import Union
+
 
 
 class StorageUtil:
@@ -16,6 +17,7 @@ class StorageUtil:
 	@staticmethod
 	def write_to_dir(
 			wd: str, data: Union[dict, object], is_pickle: bool = False
+
 	) -> None:
 		with open(wd, StorageUtil.get_write_type(is_pickle)) as f:
 			pickle.dump(data, f) if is_pickle else f.write(json.dumps(data))
@@ -24,6 +26,7 @@ class StorageUtil:
 	@staticmethod
 	def write_file(
 			wd: str, data: Union[dict, object], is_pickle: bool = False
+
 	) -> None:
 		StorageUtil.write_to_dir(wd, data, is_pickle)
 

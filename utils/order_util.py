@@ -1,4 +1,7 @@
-# Copyright © 2024 Taoshi Inc
+# Copyright © 2024 Taoshi Inc (edits by sirouk)
+
+import os
+from dotenv import load_dotenv
 
 from typing import List, Dict
 
@@ -11,7 +14,8 @@ from utils.time_util import TimeUtil
 
 class OrderUtil:
 	#URL = "http://127.0.0.1:80/miner-positions"
-	URL = "https://sn8.wildsage.io/miner-positions"
+	URL = os.getenv("MINER_POSITIONS_ENDPOINT_URL")
+
 
 	MINER_POSITIONS_DIR = "miner_positions/"
 	MINER_POSITIONS_FILE = "miner_positions.json"
@@ -66,6 +70,7 @@ class OrderUtil:
 					order["trade_pair"] = _p["trade_pair"]
 					flattened_order_map[order["order_uuid"]] = order
 					unique_order_uuids.add(order["order_uuid"])
+
 		return flattened_order_map, unique_order_uuids
 
 
@@ -80,6 +85,7 @@ class OrderUtil:
 		else:
 			logger.debug(response.__dict__)
 			logger.debug("GET request failed with status code: " + str(response.status_code))
+
 			return None
 
 		# get the response data, if it doesnt exist store it.
@@ -97,6 +103,7 @@ class OrderUtil:
 			new_orders, new_order_uuids = OrderUtil.get_flattened_order_map(new_miner_positions_data)
 			StorageUtil.write_file(OrderUtil.MINER_POSITION_LOCATION, new_miner_positions_data)
 			#logger.info(f"new order uuids to send : [{new_order_uuids}]")
+
 			logger.info("updating miner positions file.")
 			return [new_order for order_uuid, new_order in new_orders.items()]
 		else:
@@ -147,3 +154,4 @@ class OrderUtil:
 			logger.error(f"Position UUID {position_uuid} not found in the dataset.")
 
 		return total_leverage
+
