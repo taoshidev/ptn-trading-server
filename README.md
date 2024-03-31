@@ -19,7 +19,7 @@ npm install pm2@latest -g && pm2 update && pm2 save --force && pm2 startup && pm
 # run Bybit copy trading bridge for Dale
 ```bash
 cd ~
-git clone https://github.com/sirouk/ptn-trading-server
+git clone https://github.com/ptn-trading-server/ptn-trading-server
 ```
 
 ## Edit your .env file
