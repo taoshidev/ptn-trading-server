@@ -53,14 +53,27 @@ class OrderUtil:
 	def get_flattened_order_map(data):
 		flattened_order_map = {}
 		unique_order_uuids = set()
+
+		# Example of a custom sorting key function
+		# Adjust this to match your actual data structure
+		def sort_key(muid):
+			_ps = data[muid]
+			# Directly access 'thirty_day_returns' and 'thirty_day_returns_augmented' from _ps
+			total_return = _ps.get('thirty_day_returns', 0) + sum(_ps.get('thirty_day_returns_augmented', []))
+			return total_return
+
+		# Sort muids based on the sorting key
+		sorted_muids = sorted(data.keys(), key=sort_key, reverse=True)
+
 		_rank = 0
-		for _muid, _ps in data.items():
+		for _muid in sorted_muids:
+			_ps = data[_muid]
 			_rank += 1
+			
+			#print(_ps)
+			#quit()
+
 			for _p in _ps["positions"]:
-				# if position has been flat for more than 30 minutes ignore its orders
-				# sirouk 2024-03-30 - removed filter
-				#if _p["position_type"] != OrderUtil.FLAT or (_p["position_type"] == OrderUtil.FLAT and _p[
-				#	"close_ms"] > TimeUtil.now_in_millis() - TimeUtil.minute_in_millis(30)):
 				for order in _p["orders"]:
 					order["position_uuid"] = _p["position_uuid"]
 					order["position_type"] = _p["position_type"]
@@ -72,6 +85,7 @@ class OrderUtil:
 					unique_order_uuids.add(order["order_uuid"])
 
 		return flattened_order_map, unique_order_uuids
+
 
 
 	@staticmethod
@@ -98,13 +112,16 @@ class OrderUtil:
 		miner_positions_data = OrderUtil.get_current_miner_positions()
 
 		if miner_positions_data is None:
+			
 			logger.info("no miner positions file exists, sending all existing orders.")
 			# send in all orders if miner positions data doesn't exist
 			new_orders, new_order_uuids = OrderUtil.get_flattened_order_map(new_miner_positions_data)
+			
+			logger.info("updating miner positions file.")
 			StorageUtil.write_file(OrderUtil.MINER_POSITION_LOCATION, new_miner_positions_data)
+			
 			#logger.info(f"new order uuids to send : [{new_order_uuids}]")
 
-			logger.info("updating miner positions file.")
 			return [new_order for order_uuid, new_order in new_orders.items()]
 		else:
 			# compare data against existing and if theres differences send in
@@ -114,10 +131,12 @@ class OrderUtil:
 			#logger.debug(f"new order uuids : [{new_order_uuids}]")
 			#logger.debug(f"existing order uuids : [{order_uuids}]")
 
-			new_order_uuids_to_send = [value for value in new_order_uuids if value not in order_uuids]
-			#logger.info(f"new order uuids to send : [{new_order_uuids_to_send}]")
 			logger.info("updating miner positions file.")
 			StorageUtil.write_file(OrderUtil.MINER_POSITION_LOCATION, new_miner_positions_data)
+
+			new_order_uuids_to_send = [value for value in new_order_uuids if value not in order_uuids]
+			#logger.info(f"new order uuids to send : [{new_order_uuids_to_send}]")
+
 			return [new_orders[order_uuid] for order_uuid in new_order_uuids_to_send]
 
 
@@ -142,11 +161,12 @@ class OrderUtil:
 						
 						# Calculate the trade size
 						trade_numerator, trade_denominator = rank_gradient_allocation[order["rank"]]
-
+						
+						# align leverage with direction
 						if order.get('order_type') == 'LONG':
-							total_leverage['LONG'] += (order.get('leverage', 0.0) * trade_numerator)
+							total_leverage['LONG'] += abs(order.get('leverage', 0.0) * trade_numerator)
 						elif order.get('order_type') == 'SHORT':
-							total_leverage['SHORT'] += (order.get('leverage', 0.0) * trade_numerator)
+							total_leverage['SHORT'] += abs(order.get('leverage', 0.0) * trade_numerator) * -1
 			if found:
 				break  # Break from the outer loop if the position_uuid has been found
 

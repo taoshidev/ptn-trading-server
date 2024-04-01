@@ -21,16 +21,17 @@ API_KEY = os.getenv("API_KEY")
 RUN_SLEEP_TIME = 3
 MAX_LEVERAGE = 3 # trades should be closed if you want to change this
 MAX_RANK = 10
+CONTINUOUS_TRADE_MODE = False
 
 # current infra only works for one miner at a time
 # needs adjusted logic to work for every one as you'll have conflicting positions
-top_miner_uid = os.getenv("TOP_MINER_UID")
-
-pair_map = {
-	"BTCUSD": "BTCUSDT",
-	"ETHUSD": "ETHUSDT"
-}
-
+# UPDATE: working on a solution to handle multiple miners
+#  CONTINUOUS_TRADE_MODE was an attempt at this, but the flaw was shifting rank and no local taken position cache
+#  The next solution would be to pass the muid to the bybit layer and keep positions separately with an ID based apprroch, which would allow this to manage multiple positions per asset pair and thererfore multiple miners
+pair_map_json = os.getenv("PAIR_MAP")
+pair_map = json.loads(pair_map_json)
+print(f"Pair map:\n{pair_map_json}")
+#quit()
 
 
 def get_secrets():
@@ -39,13 +40,8 @@ def get_secrets():
 
 
 def calculate_gradient_allocation(max_rank):
-    """
-    Calculate the gradient allocation for each rank with lower ranks (higher priority) receiving larger portions.
-	100 can be changed to adjust max portfolio utilization if doing that at this level is desired.
+    # Calculate the gradient allocation for each rank with lower ranks (higher priority) receiving larger portions.
 
-    Returns:
-    A dictionary with each rank's allocation as a fraction (numerator, denominator).
-    """
     # Calculate the total weight by summing the inverted rank values
     total_weight = sum(max_rank + 1 - rank for rank in range(1, max_rank + 1))
 
@@ -60,7 +56,7 @@ def calculate_gradient_allocation(max_rank):
     return allocations
 
 
-def send_to_bybit(market, order, rank_gradient_allocation):
+def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
 	# Prepare order information
 	bybit_order = {
 		"symbol": market.upper(),
@@ -71,6 +67,7 @@ def send_to_bybit(market, order, rank_gradient_allocation):
 		"priority": "high",
 		"takeprofit": "0.0",
 		"trailstop": "0.0",
+		"order_time": timestamp_utc.strftime("%Y-%m-%d %H:%M:%S"),
 		"order_price": order["price"],
 		"position_uuid": order["position_uuid"],
 		"muid": order["muid"],
@@ -86,9 +83,9 @@ def send_to_bybit(market, order, rank_gradient_allocation):
 	# Interpret the order type
 	if order["order_type"] == "LONG":
 
-		bybit_order["action"] = "buy"		
-		if order["leverage"] < 0:
-			order["leverage"] *= -1
+		bybit_order["action"] = "buy"	
+		# align leverage with direction	
+		order["leverage"] = abs(order["leverage"])
 
 		# Trade size uses ranked allocation
 		trade_numerator *= order["leverage"]
@@ -96,8 +93,8 @@ def send_to_bybit(market, order, rank_gradient_allocation):
 	elif order["order_type"] == "SHORT":
 
 		bybit_order["action"] = "sell"
-		if order["leverage"] > 0:
-			order["leverage"] *= -1
+		# align leverage with direction
+		order["leverage"] = abs(order["leverage"]) * -1
 		
 		# Trade size uses ranked allocation
 		trade_numerator *= order["leverage"]
@@ -109,10 +106,12 @@ def send_to_bybit(market, order, rank_gradient_allocation):
 		leverage_sum = position_leverage["LONG"] + position_leverage["SHORT"]
 		# Override Direction
 		if leverage_sum > 0:
-			order["order_type"] = "SHORT"
+			if CONTINUOUS_TRADE_MODE:
+				order["order_type"] = "SHORT"
 			bybit_order["action"] = "sell"
 		else:
-			order["order_type"] = "LONG"
+			if CONTINUOUS_TRADE_MODE:
+				order["order_type"] = "LONG"
 			bybit_order["action"] = "buy"
 		
 		# Flip leverage sum to negate the position
@@ -186,42 +185,39 @@ if __name__ == "__main__":
 				#print(new_order)
 				#quit()
 				
-				new_order["leverage"] = abs(new_order["leverage"])
-
-				if (new_order["rank"] <= MAX_RANK or new_order["muid"] == top_miner_uid) and new_order["leverage"] <= MAX_LEVERAGE:
+				#if (new_order["rank"] <= MAX_RANK or new_order["muid"] == top_miner_uid) and abs(new_order["leverage"]) <= MAX_LEVERAGE:
+				#if new_order["muid"] == top_miner_uid:
+				# Initialize market and muid as None
+				market, order_muid = None, None
+		
+                # Iterate through each element in the trade_pair list
+				for trade_pair_element in new_order["trade_pair"]:
+					pair_info = pair_map.get(trade_pair_element)
+					if pair_info:
+						# Use the corresponding values from pair_map
+						market = pair_info["converted"]
+						order_muid = pair_info["muid"]
+						break  # Exit the loop once a match is found
+                
+                # Check if a market and muid were found
+				if market is not None and new_order["muid"] == order_muid:
+					# Proceed with your logic, since a valid market was found
+					logger.info(f"sending in order for completion [{new_order['order_uuid']}].")
+					logger.info(f"New trade to process: {new_order, market, logger}")
 					
-					# Initialize market as None
-					market = None
+					# convert processed_ms to a timestamp in UTC
+					timestamp_utc = datetime.fromtimestamp(new_order["processed_ms"] / 1000, timezone.utc)
+					print(timestamp_utc)
 
-					# Iterate through each element in the trade_pair list
-					for trade_pair_element in new_order["trade_pair"]:
-						if trade_pair_element in pair_map:
-							# If a match is found, use the corresponding value from pair_map
-							market = pair_map[trade_pair_element]
-							break  # Exit the loop once a match is found
-					
-					#print(market)
+					send_to_bybit(market, new_order, rank_gradient_allocation, timestamp_utc)
 					#quit()
 
-					# Check if a market was found
-					if market is not None:
-						# Proceed with your logic, since a valid market was found
-						logger.info(f"sending in order for completion [{new_order['order_uuid']}].")
-						logger.info(f"New trade to process: {new_order, market, logger}")
-						
-						# convert processed_ms to a timestamp in UTC
-						timestamp_utc = datetime.fromtimestamp(new_order["processed_ms"] / 1000, timezone.utc)
-						print(timestamp_utc)
+					# Remember to replace or remove the quit() call as needed for your application logic
+					
+				else:
+					# Handle the case where no match was found
+					logger.info(f"No valid trade pair found for order [{new_order['order_uuid']}].")
 
-						send_to_bybit(market, new_order, rank_gradient_allocation)
-						#quit()
-
-						# Remember to replace or remove the quit() call as needed for your application logic
-						
-					else:
-						# Handle the case where no match was found
-						logger.info(f"No valid trade pair found for order [{new_order['order_uuid']}].")
-
-					logger.info(f"order completed.")
-					TimeUtil.sleeper(5, "sent order", logger)
+				logger.info(f"order completed.")
+				TimeUtil.sleeper(5, "sent order", logger)
 		TimeUtil.sleeper(RUN_SLEEP_TIME, "completed request", logger)

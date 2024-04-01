@@ -19,7 +19,7 @@ npm install pm2@latest -g && pm2 update && pm2 save --force && pm2 startup && pm
 # run Bybit copy trading bridge for Dale
 ```bash
 cd ~
-git clone https://github.com/sirouk/ptn-trading-server
+git clone https://github.com/taoshidev/ptn-trading-server
 ```
 
 ## Edit your .env file
@@ -28,14 +28,14 @@ nano ~/ptn-trading-server/.env
 
 # contents
 API_KEY=
-TOP_MINER_UID=
-MINER_POSITIONS_ENDPOINT_URL=
+PAIR_MAP={"BTCUSD": {"converted": "BTCUSDT", "muid": "5something"}, "ETHUSD": {"converted": "ETHUSDT", "muid": "5somethingelse"}}
+MINER_POSITIONS_ENDPOINT_URL=https://path.to/positions-endpoint
 ```
 
 # Start sn8-ptn-bybit-relay
 ```bash
 cd ~/ptn-trading-server
-pm2 start ./run_at_bybit.py --name sn8-ptn-bybit-relay --interpreter python3 && pm2 save
+pm2 start ./run_at_bybit_relay.py --name sn8-ptn-bybit-relay --interpreter python3 && pm2 save
 ```
 
 ## Copyright © 2024 Taoshi Inc (edits by sirouk)
