@@ -53,17 +53,23 @@ class OrderUtil:
 	def get_flattened_order_map(data):
 		flattened_order_map = {}
 		unique_order_uuids = set()
+		
+		# Default sort (maybe)
+		# Get indexes entries from data
+		#sorted_muids = data.keys()
 
-		# Example of a custom sorting key function
-		# Adjust this to match your actual data structure
+
+		# Sort muids based on the sorting key
 		def sort_key(muid):
 			_ps = data[muid]
 			# Directly access 'thirty_day_returns' and 'thirty_day_returns_augmented' from _ps
-			total_return = _ps.get('thirty_day_returns', 0) + sum(_ps.get('thirty_day_returns_augmented', []))
+			#total_return = _ps.get('thirty_day_returns', 0) + sum(_ps.get('thirty_day_returns_augmented', []))
+			#total_return = _ps.get('thirty_day_returns', 0)
+			total_return = sum(_ps.get('thirty_day_returns_augmented', []))
 			return total_return
-
-		# Sort muids based on the sorting key
 		sorted_muids = sorted(data.keys(), key=sort_key, reverse=True)
+
+		
 
 		_rank = 0
 		for _muid in sorted_muids:
@@ -141,7 +147,7 @@ class OrderUtil:
 
 
 	@staticmethod
-	def total_leverage_by_position_type(position_uuid, rank_gradient_allocation, logger):	
+	def total_leverage_by_position_type(position_uuid, rank_gradient_allocation, rank_override, logger):	
 		
 		total_leverage = {'LONG': 0.0, 'SHORT': 0.0}
 
@@ -160,13 +166,17 @@ class OrderUtil:
 					for order in position.get('orders', []):
 						
 						# Calculate the trade size
-						trade_numerator, trade_denominator = rank_gradient_allocation[order["rank"]]
-						
+						if rank_override is not None:
+							trade_numerator, trade_denominator = rank_gradient_allocation[rank_override]
+						else:
+							# use historical rank
+							trade_numerator, trade_denominator = rank_gradient_allocation[order["rank"]]
+
 						# align leverage with direction
 						if order.get('order_type') == 'LONG':
-							total_leverage['LONG'] += abs(order.get('leverage', 0.0) * trade_numerator)
+							total_leverage['LONG'] += abs(order.get('leverage', 0.0)) * trade_numerator
 						elif order.get('order_type') == 'SHORT':
-							total_leverage['SHORT'] += abs(order.get('leverage', 0.0) * trade_numerator) * -1
+							total_leverage['SHORT'] += abs(order.get('leverage', 0.0)) * trade_numerator * -1
 			if found:
 				break  # Break from the outer loop if the position_uuid has been found
 

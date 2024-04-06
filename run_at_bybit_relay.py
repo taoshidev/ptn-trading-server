@@ -1,11 +1,10 @@
 # Copyright © 2024 Taoshi Inc (edits by sirouk)
 
 import os
-from dotenv import load_dotenv
 
 # Load environment variables
+from dotenv import load_dotenv
 load_dotenv()
-
 
 import json
 import http.client
@@ -17,11 +16,16 @@ from utils.time_util import TimeUtil
 from datetime import datetime, timezone
 
 
+# Initialize the logger
+logger = LoggerUtil.init_logger()
+
+
 API_KEY = os.getenv("API_KEY")
 RUN_SLEEP_TIME = 3
 MAX_LEVERAGE = 3 # trades should be closed if you want to change this
-MAX_RANK = 10
+MAX_RANK = 1
 CONTINUOUS_TRADE_MODE = False
+USE_PAIR_MAP_RANK = True
 
 # current infra only works for one miner at a time
 # needs adjusted logic to work for every one as you'll have conflicting positions
@@ -30,7 +34,7 @@ CONTINUOUS_TRADE_MODE = False
 #  The next solution would be to pass the muid to the bybit layer and keep positions separately with an ID based apprroch, which would allow this to manage multiple positions per asset pair and thererfore multiple miners
 pair_map_json = os.getenv("PAIR_MAP")
 pair_map = json.loads(pair_map_json)
-print(f"Pair map:\n{pair_map_json}")
+logger.info(f"Pair map:\n{pair_map_json}")
 #quit()
 
 
@@ -102,8 +106,13 @@ def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
 	elif order["order_type"] == "FLAT":
 
 		# We do not send flat orders to Bybit, instaed we send the opposite order proprtionate to the leverage
-		position_leverage = OrderUtil.total_leverage_by_position_type(order["position_uuid"], rank_gradient_allocation, logger)
+		if USE_PAIR_MAP_RANK:
+			position_leverage = OrderUtil.total_leverage_by_position_type(order["position_uuid"], rank_gradient_allocation, order["rank"], logger)
+		else:
+			position_leverage = OrderUtil.total_leverage_by_position_type(order["position_uuid"], rank_gradient_allocation, None, logger)
+
 		leverage_sum = position_leverage["LONG"] + position_leverage["SHORT"]
+
 		# Override Direction
 		if leverage_sum > 0:
 			if CONTINUOUS_TRADE_MODE:
@@ -167,13 +176,12 @@ def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
 
 if __name__ == "__main__":
 	# to be named: Taoshi SN8 - Dale @ Bybit'
-	logger = LoggerUtil.init_logger()
 	secrets = get_secrets()
 
 	# Calculate the gradient allocation for each rank
-	print(f"Calculating gradient allocation for ranks 1 to {MAX_RANK}...")
+	logger.info(f"Calculating gradient allocation for ranks 1 to {MAX_RANK}...")
 	rank_gradient_allocation = calculate_gradient_allocation(MAX_RANK)	
-	print(rank_gradient_allocation)
+	logger.info(rank_gradient_allocation)
 
 	while True:
 		logger.info("starting another check for new orders...")
@@ -189,7 +197,7 @@ if __name__ == "__main__":
 				#if new_order["muid"] == top_miner_uid:
 				# Initialize market and muid as None
 				market, order_muid = None, None
-		
+
                 # Iterate through each element in the trade_pair list
 				for trade_pair_element in new_order["trade_pair"]:
 					pair_info = pair_map.get(trade_pair_element)
@@ -197,27 +205,33 @@ if __name__ == "__main__":
 						# Use the corresponding values from pair_map
 						market = pair_info["converted"]
 						order_muid = pair_info["muid"]
+						muid_rank = pair_info["rank"]
 						break  # Exit the loop once a match is found
                 
                 # Check if a market and muid were found
-				if market is not None and new_order["muid"] == order_muid:
+				if market is not None and new_order["muid"] == order_muid and muid_rank > 0 and muid_rank <= MAX_RANK:
+
+					if new_order["position_type"] == "FLAT" and new_order["order_type"] != "FLAT":
+						logger.info(f"Skipping order [{new_order['order_uuid']}] as it is already a FLAT position!")
+						TimeUtil.sleeper(1, "sent order", logger)
+						continue
+					
+
+					# convert processed_ms to a timestamp in UTC
+					timestamp_utc = datetime.fromtimestamp(new_order["processed_ms"] / 1000, timezone.utc)
+					logger.info(timestamp_utc)
+
+					# update rank with PAIR_MAP manual rank value
+					new_order["rank"] = muid_rank
+
+
 					# Proceed with your logic, since a valid market was found
 					logger.info(f"sending in order for completion [{new_order['order_uuid']}].")
 					logger.info(f"New trade to process: {new_order, market, logger}")
-					
-					# convert processed_ms to a timestamp in UTC
-					timestamp_utc = datetime.fromtimestamp(new_order["processed_ms"] / 1000, timezone.utc)
-					print(timestamp_utc)
 
+					#continue
 					send_to_bybit(market, new_order, rank_gradient_allocation, timestamp_utc)
+					TimeUtil.sleeper(1, "sent order", logger)
 					#quit()
 
-					# Remember to replace or remove the quit() call as needed for your application logic
-					
-				else:
-					# Handle the case where no match was found
-					logger.info(f"No valid trade pair found for order [{new_order['order_uuid']}].")
-
-				logger.info(f"order completed.")
-				TimeUtil.sleeper(5, "sent order", logger)
 		TimeUtil.sleeper(RUN_SLEEP_TIME, "completed request", logger)
