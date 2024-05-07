@@ -18,15 +18,15 @@ class OrderUtil:
 
 
 	MINER_POSITIONS_DIR = "miner_positions/"
-	MINER_POSITIONS_FILE = "miner_positions.json"
+	MINER_POSITIONS_FILE = "miner_positions"
 	MINER_POSITION_LOCATION = MINER_POSITIONS_DIR + MINER_POSITIONS_FILE
 
 	FLAT = "FLAT"
 
 	@staticmethod
-	def get_current_miner_positions():
+	def get_current_miner_positions(exchange = ""):
 		try:
-			miner_positions_data = StorageUtil.get_file(OrderUtil.MINER_POSITION_LOCATION)
+			miner_positions_data = StorageUtil.get_file(OrderUtil.MINER_POSITION_LOCATION + "_" + exchange + ".json")
 			miner_positions_data = json.loads(miner_positions_data)
 		except FileNotFoundError:
 			miner_positions_data = None
@@ -62,10 +62,13 @@ class OrderUtil:
 		# Sort muids based on the sorting key
 		def sort_key(muid):
 			_ps = data[muid]
-			# Directly access 'thirty_day_returns' and 'thirty_day_returns_augmented' from _ps
+			
+			# Default to Taoshi Dashboard 30 Day Returns
+			total_return = _ps.get('thirty_day_returns', 0)
+			
+			# Other rank sort methods
 			#total_return = _ps.get('thirty_day_returns', 0) + sum(_ps.get('thirty_day_returns_augmented', []))
-			#total_return = _ps.get('thirty_day_returns', 0)
-			total_return = sum(_ps.get('thirty_day_returns_augmented', []))
+			#total_return = sum(_ps.get('thirty_day_returns_augmented', []))
 			return total_return
 		sorted_muids = sorted(data.keys(), key=sort_key, reverse=True)
 
@@ -95,7 +98,7 @@ class OrderUtil:
 
 
 	@staticmethod
-	def get_new_orders(api_key, logger) -> List[Dict]:
+	def get_new_orders(api_key, exchange, logger):
 		response = OrderUtil.get_new_miner_positions(api_key)
 
 		# Check if the request was successful (status code 200)
@@ -115,43 +118,44 @@ class OrderUtil:
 		# safely create the dir if it doesnt exist already
 		StorageUtil.make_dir(OrderUtil.MINER_POSITIONS_DIR)
 
-		miner_positions_data = OrderUtil.get_current_miner_positions()
+		miner_positions_data = OrderUtil.get_current_miner_positions(exchange)
 
 		if miner_positions_data is None:
 			
 			logger.info("no miner positions file exists, sending all existing orders.")
 			# send in all orders if miner positions data doesn't exist
+			old_orders = None
 			new_orders, new_order_uuids = OrderUtil.get_flattened_order_map(new_miner_positions_data)
 			
 			logger.info("updating miner positions file.")
-			StorageUtil.write_file(OrderUtil.MINER_POSITION_LOCATION, new_miner_positions_data)
+			StorageUtil.write_file(OrderUtil.MINER_POSITION_LOCATION + "_" + exchange + ".json", new_miner_positions_data)
 			
 			#logger.info(f"new order uuids to send : [{new_order_uuids}]")
 
-			return [new_order for order_uuid, new_order in new_orders.items()]
+			return [new_order for order_uuid, new_order in new_orders.items()], old_orders
 		else:
 			# compare data against existing and if theres differences send in
+			old_orders, order_uuids = OrderUtil.get_flattened_order_map(miner_positions_data)
 			new_orders, new_order_uuids = OrderUtil.get_flattened_order_map(new_miner_positions_data)
-			orders, order_uuids = OrderUtil.get_flattened_order_map(miner_positions_data)
 
 			#logger.debug(f"new order uuids : [{new_order_uuids}]")
 			#logger.debug(f"existing order uuids : [{order_uuids}]")
 
 			logger.info("updating miner positions file.")
-			StorageUtil.write_file(OrderUtil.MINER_POSITION_LOCATION, new_miner_positions_data)
+			StorageUtil.write_file(OrderUtil.MINER_POSITION_LOCATION + "_" + exchange + ".json", new_miner_positions_data)
 
 			new_order_uuids_to_send = [value for value in new_order_uuids if value not in order_uuids]
 			#logger.info(f"new order uuids to send : [{new_order_uuids_to_send}]")
 
-			return [new_orders[order_uuid] for order_uuid in new_order_uuids_to_send]
+			return [new_orders[order_uuid] for order_uuid in new_order_uuids_to_send], [old_orders[order_uuid] for order_uuid in order_uuids]
 
 
 	@staticmethod
-	def total_leverage_by_position_type(position_uuid, rank_gradient_allocation, rank_override, logger):	
+	def total_leverage_by_position_type(position_uuid, rank_gradient_allocation, rank_override, exchange, logger):	
 		
 		total_leverage = {'LONG': 0.0, 'SHORT': 0.0}
 
-		miner_positions_data = OrderUtil.get_current_miner_positions()
+		miner_positions_data = OrderUtil.get_current_miner_positions(exchange)
 		if miner_positions_data is None:
 			# If the miner positions data is not available, return an empty dictionary
 			logger.error("No miner positions data available.")

@@ -19,10 +19,9 @@ from datetime import datetime, timezone
 # Initialize the logger
 logger = LoggerUtil.init_logger()
 
-EXCHANGE = "bybit"
+EXCHANGE = "bybit_test"
 API_KEY = os.getenv("API_KEY")
 RUN_SLEEP_TIME = 3
-POSITION_LEVERAGE = 5 # trades should be closed if you want to change this
 MAX_LEVERAGE = 1 # trades should be closed if you want to change this
 MAX_RANK = 1
 CONTINUOUS_TRADE_MODE = False
@@ -33,7 +32,7 @@ USE_PAIR_MAP_RANK = True
 # UPDATE: working on a solution to handle multiple miners
 #  CONTINUOUS_TRADE_MODE was an attempt at this, but the flaw was shifting rank and no local taken position cache
 #  The next solution would be to pass the muid to the bybit layer and keep positions separately with an ID based apprroch, which would allow this to manage multiple positions per asset pair and thererfore multiple miners
-pair_map_json = os.getenv("PAIR_MAP")
+pair_map_json = os.getenv("PAIR_MAP_TEST")
 pair_map = json.loads(pair_map_json)
 logger.info(f"Pair map:\n{pair_map_json}")
 #quit()
@@ -67,7 +66,7 @@ def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
 		"symbol": market.upper(),
 		"direction": "",
 		"action": "",
-		"leverage": f"{POSITION_LEVERAGE}",  # Assuming leverage is an integer value
+		"leverage": f"{MAX_LEVERAGE}",  # Assuming leverage is an integer value
 		"size": "",
 		"priority": "high",
 		"takeprofit": "0.0",
@@ -106,7 +105,7 @@ def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
 
 	elif order["order_type"] == "FLAT":
 
-		# We do not send flat orders to Bybit, instead we send the opposite order proprtionate to the leverage
+		# We do not send flat orders to Bybit, instaed we send the opposite order proprtionate to the leverage
 		if USE_PAIR_MAP_RANK:
 			position_leverage = OrderUtil.total_leverage_by_position_type(order["position_uuid"], rank_gradient_allocation, order["rank"], EXCHANGE, logger)
 		else:
@@ -146,7 +145,7 @@ def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
 
 
 	# Headers and endpoint with trailing slash
-	endpoint = "/bybit-dale/"
+	endpoint = "/bybit-tdale/"
 	headers = {'Content-Type': 'application/json'}
 
 	# Create connection and POST
@@ -189,50 +188,94 @@ if __name__ == "__main__":
 
 		new_orders, old_orders = OrderUtil.get_new_orders(API_KEY, EXCHANGE, logger)
 		
-		if new_orders is not None:
-			for new_order in new_orders:
-				#print(new_order)
+		if True:
+
+			# Aggregate the account allocation and leverage
+			queued_order = {}
+            
+			# Combine the new and old orders
+			all_orders = []
+			if old_orders:
+				all_orders += old_orders
+			if new_orders:
+				all_orders += new_orders
+
+
+			for order in all_orders:
+
+				# Skip if the order is already a FLAT position
+				if order["position_type"] == "FLAT" and order["order_type"] != "FLAT":
+					#logger.info(f"Skipping order [{order['order_uuid']}] as it is already a FLAT position!")
+					continue
+			
+				if order["position_type"] != "FLAT" and order["order_type"] == "FLAT":
+					logger.info(f"Non-Flat Position with Flat Order Type: {order}")
+					quit()
+
+
+				#print(order)
 				#quit()
-				
-				#if (new_order["rank"] <= MAX_RANK or new_order["muid"] == top_miner_uid) and abs(new_order["leverage"]) <= MAX_LEVERAGE:
-				#if new_order["muid"] == top_miner_uid:
-				# Initialize market and muid as None
-				market, order_muid, muid_rank = None, None, 0
+
+				market, max_rank, allocations = None, None, None
 
                 # Iterate through each element in the trade_pair list
-				for trade_pair_element in new_order["trade_pair"]:
+				for trade_pair_element in order["trade_pair"]:
+
 					pair_info = pair_map.get(trade_pair_element)
 					if pair_info:
-						# Use the corresponding values from pair_map
-						market = pair_info["converted"]
-						order_muid = pair_info["muid"]
-						muid_rank = pair_info["rank"]
-						break  # Exit the loop once a match is found
-                
-                # Check if a market and muid were found
-				if market is not None and new_order["muid"] == order_muid and muid_rank > 0 and muid_rank <= MAX_RANK:
+						exchange = pair_info.get("exchange", "")			
+						if exchange == EXCHANGE:
+							market = pair_info["ticker"]
+							max_rank = pair_info.get("max_rank", None)
+							allocations = pair_info.get("allocations", None)
+							break
 
-					# Skip if the order is already a FLAT position as it is old news
-					if new_order["position_type"] == "FLAT" and new_order["order_type"] != "FLAT":
-						logger.info(f"Skipping order [{new_order['order_uuid']}] as it is already a FLAT position!")
-						TimeUtil.sleeper(1, "skipped order", logger)
-						continue					
+
+				# Check to see if muid is in the allocated muid list
+				if market and max_rank and (order["muid"] in allocations or order["rank"] in range(1, max_rank)):
+					
+					
+
+					# if net leverage is positive, set the multiplier to 1, otherwise -1
+	 				# if order["order_type"] == "FLAT":
+					# 	if order["position_type"] == "LONG":
+					# 		order["leverage"] = 1
+					direction = order["order_type"] # LONG, SHORT, FLAT
+
+					# Prepare the order	 				
+					if not queued_order.get(market):
+						queued_order[market] = {"LONG": {"allocation": {}}, "SHORT": {"allocation": {}}, "FLAT": {"allocation": {}}, "timestamp_utc": datetime.fromtimestamp(order["processed_ms"] / 1000, timezone.utc)}			
+
+					# Size of the trade for each Long and Short positions
+					if order["muid"] in allocations:
+						# Use the static muid allocation
+						queued_order[market][direction]["allocation"][order["muid"]] = allocations[order["muid"]]
+					else:
+						# Use the rank to calculate the allocation					
+						rank_gradient_allocation = calculate_gradient_allocation(max_rank)	
+						trade_numerator, trade_denominator = rank_gradient_allocation[order["rank"]]
+
+						# print the numerator and denominator
+						logger.info(f"Rank: {order['rank']}, Numerator: {trade_numerator}, Denominator: {trade_denominator}")
+
+						queued_order[market][direction]["allocation"][order["muid"]] = trade_numerator / trade_denominator
+						print(queued_order)
+						quit()
+
 
 
 					# convert processed_ms to a timestamp in UTC
-					timestamp_utc = datetime.fromtimestamp(new_order["processed_ms"] / 1000, timezone.utc)
-					logger.info(timestamp_utc)
+					# if queued order is long and has an allocation with a sum greater than one
+					if direction == "LONG" and sum(queued_order[market][direction]["allocation"].values()) > 1:
+						logger.info(queued_order)
+						quit()
+						#continue					
+					
 
 
-					# update rank with PAIR_MAP manual rank value
-					new_order["rank"] = muid_rank
+					# Proceed with your logic, since a valid market was found
+					logger.info(f"New trade to process: {queued_order}")
 
-
-					# Notify the console that the order is being sent
-					logger.info(f"New trade to process: {new_order, market, logger}")
-
-					#continue
-					send_to_bybit(market, new_order, rank_gradient_allocation, timestamp_utc)
 					TimeUtil.sleeper(1, "sent order", logger)
 					#quit()
 
