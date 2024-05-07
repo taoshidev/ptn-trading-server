@@ -21,7 +21,7 @@ logger = LoggerUtil.init_logger()
 
 EXCHANGE = "bybit"
 API_KEY = os.getenv("API_KEY")
-RUN_SLEEP_TIME = 3
+RUN_SLEEP_TIME = 2
 POSITION_LEVERAGE = 5 # trades should be closed if you want to change this
 MAX_LEVERAGE = 1 # trades should be closed if you want to change this
 MAX_RANK = 1
