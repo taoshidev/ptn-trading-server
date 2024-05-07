@@ -44,20 +44,20 @@ def get_secrets():
 
 
 def calculate_gradient_allocation(max_rank):
-    # Calculate the gradient allocation for each rank with lower ranks (higher priority) receiving larger portions.
+	# Calculate the gradient allocation for each rank with lower ranks (higher priority) receiving larger portions.
 
-    # Calculate the total weight by summing the inverted rank values
-    total_weight = sum(max_rank + 1 - rank for rank in range(1, max_rank + 1))
+	# Calculate the total weight by summing the inverted rank values
+	total_weight = sum(max_rank + 1 - rank for rank in range(1, max_rank + 1))
 
-    # Calculate the allocation for each rank
-    allocations = {}
-    for rank in range(1, max_rank + 1):
-        inverted_rank = max_rank + 1 - rank
-        numerator = inverted_rank
-        denominator = total_weight
-        allocations[rank] = (numerator, denominator)
-    
-    return allocations
+	# Calculate the allocation for each rank
+	allocations = {}
+	for rank in range(1, max_rank + 1):
+		inverted_rank = max_rank + 1 - rank
+		numerator = inverted_rank
+		denominator = total_weight
+		allocations[rank] = (numerator, denominator)
+	
+	return allocations
 
 
 def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
 			# Aggregate the account allocation and leverage
 			queued_order = {}
-            
+			
 			# Combine the new and old orders
 			all_orders = []
 			if old_orders:
@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
 				market, max_rank, allocations = None, None, None
 
-                # Iterate through each element in the trade_pair list
+				# Iterate through each element in the trade_pair list
 				for trade_pair_element in order["trade_pair"]:
 
 					pair_info = pair_map.get(trade_pair_element)

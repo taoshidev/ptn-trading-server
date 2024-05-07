@@ -45,20 +45,20 @@ def get_secrets():
 
 
 def calculate_gradient_allocation(max_rank):
-    # Calculate the gradient allocation for each rank with lower ranks (higher priority) receiving larger portions.
+	# Calculate the gradient allocation for each rank with lower ranks (higher priority) receiving larger portions.
 
-    # Calculate the total weight by summing the inverted rank values
-    total_weight = sum(max_rank + 1 - rank for rank in range(1, max_rank + 1))
+	# Calculate the total weight by summing the inverted rank values
+	total_weight = sum(max_rank + 1 - rank for rank in range(1, max_rank + 1))
 
-    # Calculate the allocation for each rank
-    allocations = {}
-    for rank in range(1, max_rank + 1):
-        inverted_rank = max_rank + 1 - rank
-        numerator = inverted_rank
-        denominator = total_weight
-        allocations[rank] = (numerator, denominator)
-    
-    return allocations
+	# Calculate the allocation for each rank
+	allocations = {}
+	for rank in range(1, max_rank + 1):
+		inverted_rank = max_rank + 1 - rank
+		numerator = inverted_rank
+		denominator = total_weight
+		allocations[rank] = (numerator, denominator)
+	
+	return allocations
 
 
 def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
@@ -199,7 +199,7 @@ if __name__ == "__main__":
 				# Initialize market and muid as None
 				market, order_muid, muid_rank = None, None, 0
 
-                # Iterate through each element in the trade_pair list
+			 # Iterate through each element in the trade_pair list
 				for trade_pair_element in new_order["trade_pair"]:
 					pair_info = pair_map.get(trade_pair_element)
 					if pair_info:
@@ -208,8 +208,8 @@ if __name__ == "__main__":
 						order_muid = pair_info["muid"]
 						muid_rank = pair_info["rank"]
 						break  # Exit the loop once a match is found
-                
-                # Check if a market and muid were found
+			 
+			 # Check if a market and muid were found
 				if market is not None and new_order["muid"] == order_muid and muid_rank > 0 and muid_rank <= MAX_RANK:
 
 					# Skip if the order is already a FLAT position as it is old news
