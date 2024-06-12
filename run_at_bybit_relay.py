@@ -137,6 +137,9 @@ def send_to_bybit(market, order, rank_gradient_allocation, timestamp_utc):
 	# This will remain the same, adjusted for max leverage "their sandbox"
 	trade_denominator *= MAX_LEVERAGE
 
+	# Adjust the trade size based on the order multiplier
+	trade_numerator *= order["entry_mult"]
+
 	bybit_order["size"] = f'{trade_numerator}/{trade_denominator}'
 
 
@@ -197,7 +200,7 @@ if __name__ == "__main__":
 				#if (new_order["rank"] <= MAX_RANK or new_order["muid"] == top_miner_uid) and abs(new_order["leverage"]) <= MAX_LEVERAGE:
 				#if new_order["muid"] == top_miner_uid:
 				# Initialize market and muid as None
-				market, order_muid, muid_rank = None, None, 0
+				market, order_muid, muid_rank, entry_mult = None, None, 0, 1
 
 			 # Iterate through each element in the trade_pair list
 				for trade_pair_element in new_order["trade_pair"]:
@@ -207,15 +210,16 @@ if __name__ == "__main__":
 						market = pair_info["converted"]
 						order_muid = pair_info["muid"]
 						muid_rank = pair_info["rank"]
+						entry_mult = pair_info["entry_mult"]
 						break  # Exit the loop once a match is found
 			 
 			 # Check if a market and muid were found
-				if market is not None and new_order["muid"] == order_muid and muid_rank > 0 and muid_rank <= MAX_RANK:
+				if market is not None and new_order["muid"] == order_muid and muid_rank > 0 and muid_rank <= MAX_RANK and entry_mult > 0:
 
 					# Skip if the order is already a FLAT position as it is old news
 					if new_order["position_type"] == "FLAT" and new_order["order_type"] != "FLAT":
 						logger.info(f"Skipping order [{new_order['order_uuid']}] as it is already a FLAT position!")
-						TimeUtil.sleeper(1, "skipped order", logger)
+						#TimeUtil.sleeper(1, "skipped order", logger)
 						continue					
 
 
@@ -226,6 +230,9 @@ if __name__ == "__main__":
 
 					# update rank with PAIR_MAP manual rank value
 					new_order["rank"] = muid_rank
+
+					# entry_mult is used to adjust the position size along with the denominator
+					new_order["entry_mult"] = entry_mult
 
 
 					# Notify the console that the order is being sent
